@@ -81,4 +81,9 @@ dependencies {
     // Lifecycle
     implementation(libs.androidx.lifecycle.runtime.ktx.v270)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    //workmanager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    implementation(libs.androidx.material.icons.extended)
 }

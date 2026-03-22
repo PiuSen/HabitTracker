@@ -5,6 +5,7 @@ import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.peu.habittracker.db.Habit
+import com.peu.habittracker.db.HabitCompletion
 import com.peu.habittracker.repository.HabitRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,11 +55,12 @@ class HomeViewModel @Inject constructor(
     @RequiresApi(Build.VERSION_CODES.O)
     fun toggleHabitCompletion(habitId: Long) {
         viewModelScope.launch {
-            val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val today = LocalDate.now()
+                .format(DateTimeFormatter.ISO_LOCAL_DATE)
+
             repository.toggleHabitCompletion(habitId, today)
         }
     }
-
     fun deleteHabit(habit: Habit) {
         viewModelScope.launch {
             _deletedHabit.value = habit

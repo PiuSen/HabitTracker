@@ -62,7 +62,7 @@ class HabitRepositoryImpl @Inject constructor(
         val completions = habitDao.getCompletionsForHabit(habitId).first()
             .sortedByDescending { it.date }
 
-        val currentStreak = calculateCurrentStreak(completions, dateStr)
+        val currentStreak = calculateCurrentStreakOptimized(habitId, dateStr)
         val longestStreak = maxOf(habit.longestStreak, currentStreak)
 
         habitDao.updateHabit(
@@ -81,7 +81,7 @@ class HabitRepositoryImpl @Inject constructor(
             .sortedByDescending { it.date }
 
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val currentStreak = calculateCurrentStreak(completions, today)
+        val currentStreak = calculateCurrentStreakOptimized(habitId, today)
 
         habitDao.updateHabit(
             habit.copy(
@@ -92,18 +92,27 @@ class HabitRepositoryImpl @Inject constructor(
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun calculateCurrentStreak(completions: List<HabitCompletion>, fromDate: String): Int {
-        if (completions.isEmpty()) return 0
+    private suspend fun calculateCurrentStreakOptimized(
+        habitId: Long,
+        fromDate: String
+    ): Int {
 
         var streak = 0
         var currentDate = LocalDate.parse(fromDate)
         val formatter = DateTimeFormatter.ISO_LOCAL_DATE
 
-        val completionDates = completions.map { it.date }.toSet()
+        while (true) {
+            val entry = habitDao.getCompletion(
+                habitId,
+                currentDate.format(formatter)
+            )
 
-        while (completionDates.contains(currentDate.format(formatter))) {
-            streak++
-            currentDate = currentDate.minusDays(1)
+            if (entry != null) {
+                streak++
+                currentDate = currentDate.minusDays(1)
+            } else {
+                break
+            }
         }
 
         return streak

@@ -29,9 +29,11 @@ class HomeViewModel @Inject constructor(
 
     private val _deletedHabit = MutableStateFlow<Habit?>(null)
     val deletedHabit: StateFlow<Habit?> = _deletedHabit.asStateFlow()
-
+    private val _weeklyStats = MutableStateFlow<List<Int>>(emptyList())
+    val weeklyStats: StateFlow<List<Int>> = _weeklyStats
     init {
         loadHabits()
+        loadWeekly()
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -59,12 +61,19 @@ class HomeViewModel @Inject constructor(
                 .format(DateTimeFormatter.ISO_LOCAL_DATE)
 
             repository.toggleHabitCompletion(habitId, today)
+
+            // 🔥 refresh stats
+            loadWeekly()
         }
     }
+
     fun deleteHabit(habit: Habit) {
         viewModelScope.launch {
             _deletedHabit.value = habit
             repository.deleteHabit(habit)
+
+            // 🔥 refresh stats
+            loadWeekly()
         }
     }
 
@@ -73,6 +82,20 @@ class HomeViewModel @Inject constructor(
             _deletedHabit.value?.let { habit ->
                 repository.insertHabit(habit)
                 _deletedHabit.value = null
+            }
+        }
+    }
+
+
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun loadWeekly() {
+        viewModelScope.launch {
+            try {
+                val data = repository.getWeeklyStats()
+                _weeklyStats.value = data
+            } catch (e: Exception) {
+                _weeklyStats.value = emptyList()
             }
         }
     }

@@ -1,115 +1,124 @@
 package com.peu.habittracker.repository
-
 import android.os.Build
 import androidx.annotation.RequiresApi
+import com.peu.habittracker.db.DailyStat
 import com.peu.habittracker.db.Habit
 import com.peu.habittracker.db.HabitCompletion
 import com.peu.habittracker.db.HabitDao
+
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 class HabitRepositoryImpl @Inject constructor(
     private val habitDao: HabitDao
-) : HabitRepository
-{
+) : HabitRepository {
 
     override fun getAllHabits(): Flow<List<Habit>> = habitDao.getAllHabits()
 
-    override fun getHabitById(habitId: Long): Flow<Habit?> = habitDao.getHabitById(habitId)
+    override fun getHabitById(habitId: Long): Flow<Habit?> =
+        habitDao.getHabitById(habitId)
 
-    override suspend fun insertHabit(habit: Habit): Long = habitDao.insertHabit(habit)
+    override suspend fun insertHabit(habit: Habit): Long =
+        habitDao.insertHabit(habit)
 
-    override suspend fun updateHabit(habit: Habit) = habitDao.updateHabit(habit)
+    override suspend fun updateHabit(habit: Habit) =
+        habitDao.updateHabit(habit)
 
-    override suspend fun deleteHabit(habit: Habit) = habitDao.deleteHabit(habit)
+    override suspend fun deleteHabit(habit: Habit) =
+        habitDao.deleteHabit(habit)
 
     @RequiresApi(Build.VERSION_CODES.O)
     override suspend fun toggleHabitCompletion(habitId: Long, date: String) {
-        val existing = habitDao.getCompletion(habitId, date)
 
-        if (existing != null) {
+        val isCompleted = habitDao.isCompleted(habitId, date)
+
+        if (isCompleted) {
+            val existing = habitDao.getCompletion(habitId, date) ?: return
             habitDao.deleteCompletion(existing)
-            updateStreakOnUncomplete(habitId)
+            updateAfterUncomplete(habitId, date)
         } else {
-            val completion = HabitCompletion(habitId = habitId, date = date)
-            habitDao.insertCompletion(completion)
-            updateStreakOnComplete(habitId, date)
+            habitDao.insertCompletion(
+                HabitCompletion(habitId = habitId, date = date)
+            )
+            updateAfterComplete(habitId, date)
         }
     }
 
-    override suspend fun isHabitCompletedOnDate(habitId: Long, date: String): Boolean {
-        return habitDao.getCompletion(habitId, date) != null
-    }
+    override suspend fun isHabitCompletedOnDate(
+        habitId: Long,
+        date: String
+    ): Boolean = habitDao.isCompleted(habitId, date)
 
-    override fun getCompletionsForHabit(habitId: Long): Flow<List<HabitCompletion>> {
-        return habitDao.getCompletionsForHabit(habitId)
-    }
+    override fun getCompletionsForHabit(habitId: Long): Flow<List<HabitCompletion>> =
+        habitDao.getCompletionsForHabit(habitId)
 
     override suspend fun getCompletionsInRange(
         habitId: Long,
         startDate: String,
         endDate: String
-    ): List<HabitCompletion> {
-        return habitDao.getCompletionsInRange(habitId, startDate, endDate)
-    }
+    ): List<HabitCompletion> =
+        habitDao.getCompletionsInRange(habitId, startDate, endDate)
+
+    // -------------------------------
+    // 🔥 STREAK LOGIC (OPTIMIZED)
+    // -------------------------------
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun updateStreakOnComplete(habitId: Long, dateStr: String) {
-        val habit = habitDao.getHabitById(habitId).first() ?: return
-        val completions = habitDao.getCompletionsForHabit(habitId).first()
-            .sortedByDescending { it.date }
+    private suspend fun updateAfterComplete(habitId: Long, date: String) {
+        val habit = habitDao.getHabitByIdOnce(habitId) ?: return
 
-        val currentStreak = calculateCurrentStreakOptimized(habitId, dateStr)
-        val longestStreak = maxOf(habit.longestStreak, currentStreak)
+        val streak = calculateStreak(habitId, date)
 
         habitDao.updateHabit(
             habit.copy(
-                currentStreak = currentStreak,
-                longestStreak = longestStreak,
+                currentStreak = streak,
+                longestStreak = maxOf(habit.longestStreak, streak),
                 totalCompletions = habit.totalCompletions + 1
             )
         )
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun updateStreakOnUncomplete(habitId: Long) {
-        val habit = habitDao.getHabitById(habitId).first() ?: return
-        val completions = habitDao.getCompletionsForHabit(habitId).first()
-            .sortedByDescending { it.date }
+    private suspend fun updateAfterUncomplete(habitId: Long, date: String) {
+        val habit = habitDao.getHabitByIdOnce(habitId) ?: return
 
-        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val currentStreak = calculateCurrentStreakOptimized(habitId, today)
+        val streak = calculateStreak(habitId, date)
 
         habitDao.updateHabit(
             habit.copy(
-                currentStreak = currentStreak,
+                currentStreak = streak,
                 totalCompletions = maxOf(0, habit.totalCompletions - 1)
             )
         )
     }
 
+    // -------------------------------
+    // ⚡ OPTIMIZED STREAK CALCULATION
+    // -------------------------------
+
     @RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun calculateCurrentStreakOptimized(
+    private suspend fun calculateStreak(
         habitId: Long,
         fromDate: String
     ): Int {
 
-        var streak = 0
-        var currentDate = LocalDate.parse(fromDate)
+        val completions = habitDao
+            .getCompletionsBeforeDate(habitId, fromDate)
+
+        if (completions.isEmpty()) return 0
+
         val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+        var streak = 0
+        var expectedDate = LocalDate.parse(fromDate)
 
-        while (true) {
-            val entry = habitDao.getCompletion(
-                habitId,
-                currentDate.format(formatter)
-            )
+        for (completion in completions) {
+            val completionDate = LocalDate.parse(completion.date)
 
-            if (entry != null) {
+            if (completionDate == expectedDate) {
                 streak++
-                currentDate = currentDate.minusDays(1)
+                expectedDate = expectedDate.minusDays(1)
             } else {
                 break
             }
@@ -117,4 +126,34 @@ class HabitRepositoryImpl @Inject constructor(
 
         return streak
     }
+
+    override suspend fun getDailyStats(): List<DailyStat> {
+        return habitDao.getDailyCompletionStats()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    override suspend fun getWeeklyStats(): List<Int> {
+
+        val today = LocalDate.now()
+        val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+
+        // Total habits (avoid divide by zero)
+        val totalHabits = habitDao.getAllHabitsOnce().size.coerceAtLeast(1)
+
+        val result = mutableListOf<Int>()
+
+        for (i in 6 downTo 0) {
+            val date = today.minusDays(i.toLong()).format(formatter)
+
+            val completedCount = habitDao.getCompletionCountByDate(date)
+
+            // Convert to percentage (0–100)
+            val percentage = (completedCount * 100) / totalHabits
+
+            result.add(percentage)
+        }
+
+        return result
+    }
+
 }

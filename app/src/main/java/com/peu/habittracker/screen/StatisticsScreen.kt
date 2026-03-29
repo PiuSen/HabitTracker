@@ -40,6 +40,7 @@ fun StatisticsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
+    val weeklyStats by viewModel.weeklyStats.collectAsState()
 
     Scaffold(
         topBar = {
@@ -93,7 +94,7 @@ fun StatisticsScreen(
                     )
 
                     // Weekly Progress Chart
-                    WeeklyProgressChart(habits = habits)
+                    WeeklyProgressChart(weeklyStats)
 
                     // Top Performing Habits
                     TopHabitsCard(habits = habits)
@@ -273,8 +274,11 @@ fun CompletionRateCard(
 
 @Composable
 fun WeeklyProgressChart(
-    habits: List<com.peu.habittracker.viewModel.HabitWithStatus>
+    weeklyStats: List<Int>
 ) {
+    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    val max = (weeklyStats.maxOrNull() ?: 1).coerceAtLeast(1)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp)
@@ -289,10 +293,6 @@ fun WeeklyProgressChart(
                 fontWeight = FontWeight.Bold
             )
 
-            // Bar Chart (Simulated data for demo)
-            val weekData = listOf(85, 90, 75, 95, 88, 92, 80) // Mock completion percentages
-            val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -300,21 +300,34 @@ fun WeeklyProgressChart(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.Bottom
             ) {
-                weekData.forEachIndexed { index, value ->
+                weeklyStats.forEachIndexed { index, value ->
+                    val normalized = (value.toFloat() / max)
+
                     BarChartItem(
-                        value = value,
-                        label = days[index],
+                        value = normalized,
+                        label = days.getOrElse(index) { "" },
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
+
+            // 🔥 Insight (NEW)
+            val bestDayIndex = weeklyStats.indexOf(weeklyStats.maxOrNull())
+            val bestDay = days.getOrElse(bestDayIndex) { "N/A" }
+
+            Text(
+                text = "🔥 Most productive day: $bestDay",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
 
 @Composable
+
 fun BarChartItem(
-    value: Int,
+    value: Float, // 0.0 → 1.0
     label: String,
     color: Color
 ) {
@@ -325,7 +338,7 @@ fun BarChartItem(
         Box(
             modifier = Modifier
                 .width(32.dp)
-                .height((value * 1.5f).dp)
+                .height((value * 150).dp) // dynamic scaling
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(color, color.copy(alpha = 0.6f))

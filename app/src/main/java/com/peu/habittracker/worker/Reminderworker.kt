@@ -15,6 +15,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.peu.habittracker.MainActivity
 import com.peu.habittracker.R
+import com.peu.habittracker.db.Habit
+import com.peu.habittracker.util.NotificationScheduler
 
 class ReminderWorker(
     context: Context,
@@ -23,11 +25,22 @@ class ReminderWorker(
 {
 
     override suspend fun doWork(): Result {
-        val habitName = inputData.getString("habitName") ?: "Your Habit"
-        val habitIcon = inputData.getString("habitIcon") ?: "🎯"
-        val habitId = inputData.getLong("habitId", -1L)
 
-        showNotification(habitName, habitIcon, habitId)
+        // 🔔 Show notification here
+
+        val habitId = inputData.getLong("habitId", -1)
+        val habitName = inputData.getString("habitName") ?: ""
+        val habitIcon = inputData.getString("habitIcon") ?: ""
+        val hour = inputData.getInt("hour", 8)
+        val minute = inputData.getInt("minute", 0)
+
+        // ✅ RESCHEDULE NEXT DAY
+        NotificationScheduler.scheduleNotification(
+            applicationContext,
+            Habit(id = habitId, name = habitName, color = 0, icon = habitIcon),
+            hour,
+            minute
+        )
 
         return Result.success()
     }

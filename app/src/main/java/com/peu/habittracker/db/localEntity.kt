@@ -17,7 +17,9 @@ data class Habit(
     val totalCompletions: Int = 0
 )
 
-
+enum class HabitType {
+    DAILY, WEEKLY, CUSTOM
+}
 
 @Entity(
     tableName = "habit_completions",
@@ -29,7 +31,10 @@ data class Habit(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("habitId"), Index("date")]
+    indices = [
+        Index(value = ["habitId", "date"], unique = true)
+    ]
+   // indices = [Index("habitId"), Index("date")]
 )
 
 data class HabitCompletion(

@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -12,6 +13,23 @@ import kotlinx.coroutines.flow.Flow
 interface HabitDao {
     @Query("SELECT * FROM habits ORDER BY createdAt DESC")
     fun getAllHabits(): Flow<List<Habit>>
+
+    @Transaction
+    @Query("SELECT * FROM habits ORDER BY createdAt DESC")
+    fun getAllHabitsWithCategory(): Flow<List<HabitWithCategory>>
+
+    @Transaction
+    @Query("SELECT * FROM habits WHERE categoryId = :categoryId ORDER BY createdAt DESC")
+    fun getHabitsByCategory(categoryId: Long): Flow<List<HabitWithCategory>>
+
+    @Query("SELECT * FROM categories ORDER BY `order` ASC")
+    fun getAllCategories(): Flow<List<Category>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCategory(category: Category): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCategories(categories: List<Category>)
 
     @Query("SELECT * FROM habits WHERE id = :habitId")
     fun getHabitById(habitId: Long): Flow<Habit?>
@@ -30,7 +48,6 @@ interface HabitDao {
 
     @Query("SELECT * FROM habit_completions WHERE habitId = :habitId ORDER BY date DESC")
     fun getCompletionsForHabit(habitId: Long): Flow<List<HabitCompletion>>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCompletion(completion: HabitCompletion)
 
@@ -80,7 +97,7 @@ WHERE date = :date
 }
 
 
-data class DailyStat(
-    val date: String,
-    val count: Int
-)
+//data class DailyStat(
+//    val date: String,
+//    val count: Int
+//)

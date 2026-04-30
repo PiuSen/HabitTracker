@@ -2,6 +2,8 @@
 
 package com.peu.habittracker.screen
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -29,8 +31,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.peu.habittracker.screen.component.CategorySelector
 import com.peu.habittracker.viewModel.AddHabitViewModel
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddHabitScreen(
@@ -97,6 +101,22 @@ fun AddHabitScreen(
                     placeholder = "Why is this habit important to you?",
                     minLines = 3,
                     icon = Icons.Default.Notes
+                )
+
+                var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
+
+// Category Selector Section
+                SectionHeader(
+                    title = "Choose Category",
+                    subtitle = "Organize your habits"
+                )
+
+                CategorySelector(
+                    selectedCategoryId = selectedCategoryId,
+                    onCategorySelect = { category ->
+                        selectedCategoryId = category?.id
+                        viewModel.onCategorySelect(category?.id)
+                    }
                 )
 
                 // Icon Selector Section

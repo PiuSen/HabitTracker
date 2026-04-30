@@ -1,6 +1,7 @@
 package com.peu.habittracker.repository
 import android.os.Build
 import androidx.annotation.RequiresApi
+import com.peu.habittracker.db.Category
 import com.peu.habittracker.db.DailyStat
 import com.peu.habittracker.db.Habit
 import com.peu.habittracker.db.HabitCompletion
@@ -156,4 +157,8 @@ class HabitRepositoryImpl @Inject constructor(
         return result
     }
 
+
+    override fun getAllCategories(): Flow<List<Category>> {
+        return habitDao.getAllCategories()
+    }
 }

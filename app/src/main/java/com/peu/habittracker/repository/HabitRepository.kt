@@ -2,6 +2,7 @@ package com.peu.habittracker.repository
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import com.peu.habittracker.db.Category
 import com.peu.habittracker.db.DailyStat
 import com.peu.habittracker.db.Habit
 import com.peu.habittracker.db.HabitCompletion
@@ -23,4 +24,7 @@ interface HabitRepository {
     suspend fun getWeeklyStats(): List<Int>
 
     suspend fun getCompletionsInRange(habitId: Long, startDate: String, endDate: String): List<HabitCompletion>
+
+    // ✅ ADD THIS
+    fun getAllCategories(): Flow<List<Category>>
 }

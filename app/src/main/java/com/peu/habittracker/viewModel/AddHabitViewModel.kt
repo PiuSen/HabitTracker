@@ -19,6 +19,7 @@ data class AddHabitState(
     val selectedColor: Color = Color(0xFF6200EE),
     val selectedIcon: String = "🎯",
     val isLoading: Boolean = false,
+    val categoryId: Long? = null,
     val error: String? = null
 )
 
@@ -33,6 +34,9 @@ class AddHabitViewModel @Inject constructor(
 
     fun onNameChange(name: String) {
         _state.value = _state.value.copy(name = name)
+    }
+    fun onCategorySelect(categoryId: Long?) {
+        _state.value = _state.value.copy(categoryId = categoryId)
     }
 
     fun onDescriptionChange(description: String) {

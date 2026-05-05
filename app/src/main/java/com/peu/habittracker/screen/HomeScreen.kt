@@ -5,6 +5,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,46 +19,27 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.peu.habittracker.ui.theme.*
 import com.peu.habittracker.viewModel.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-
-// ─── Design Tokens ────────────────────────────────────────────────────────────
-
-private val Ink900   = Color(0xFF0D0D12)
-private val Ink700   = Color(0xFF1C1C27)
-private val Ink500   = Color(0xFF3A3A4F)
-private val Ink300   = Color(0xFF6E6E8A)
-private val Ink100   = Color(0xFFBBBBCC)
-private val Ink050   = Color(0xFFF0F0F6)
-
-private val Violet   = Color(0xFF7C5CFC)
-private val VioletSoft = Color(0xFFEDE8FF)
-private val VioletDeep = Color(0xFF4E30D9)
-
-private val Sage     = Color(0xFF3ECC8A)
-private val SageSoft = Color(0xFFE3F9EE)
-private val Amber    = Color(0xFFFFB547)
-private val AmberSoft = Color(0xFFFFF3DC)
-private val Coral    = Color(0xFFFF6B6B)
-private val CoralSoft = Color(0xFFFFECEC)
-
-private val SurfaceLight = Color(0xFFFAFAFC)
-private val SurfaceDark  = Color(0xFF131318)
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 enum class HabitFilter { ALL, COMPLETED, PENDING, STREAK }
-
-// ─── HomeScreen ───────────────────────────────────────────────────────────────
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -71,124 +53,146 @@ fun HomeScreen(
     onNavigateToAchievement: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    val uiState      by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
     val deletedHabit by viewModel.deletedHabit.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedFilter by remember { mutableStateOf(HabitFilter.ALL) }
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // Parallax scroll effect
+    val scrollOffset by remember { derivedStateOf { listState.firstVisibleItemScrollOffset } }
     val isScrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
 
     LaunchedEffect(deletedHabit) {
         deletedHabit?.let { habit ->
             val result = snackbarHostState.showSnackbar(
-                message     = "${habit.name} deleted",
+                message = "🗑️ ${habit.name} deleted",
                 actionLabel = "Undo",
-                duration    = SnackbarDuration.Short
+                duration = SnackbarDuration.Short
             )
-            if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.undoDelete()
+            }
         }
     }
 
-    Scaffold(
-        containerColor = SurfaceLight,
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
-                Snackbar(
-                    snackbarData       = data,
-                    containerColor     = Ink700,
-                    contentColor       = Color.White,
-                    actionColor        = Violet,
-                    shape              = RoundedCornerShape(14.dp),
-                    modifier           = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Animated gradient background
+        AnimatedGradientBackground()
+
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = {
+                SnackbarHost(snackbarHostState) { data ->
+                    PremiumSnackbar(data)
+                }
+            },
+            floatingActionButton = {
+                PremiumFAB(onClick = onNavigateToAddHabit)
             }
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick          = onNavigateToAddHabit,
-                containerColor   = Violet,
-                contentColor     = Color.White,
-                elevation        = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 0.dp,
-                    pressedElevation = 0.dp
-                ),
-                shape            = RoundedCornerShape(18.dp),
-                modifier         = Modifier.size(56.dp)
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
-                Icon(Icons.Default.Add, "Add", modifier = Modifier.size(24.dp))
-            }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // ── Sticky Header ──────────────────────────────────────────────
-            HomeHeader(
-                uiState             = uiState,
-                isScrolled          = isScrolled,
-                onStatistics        = onNavigateToStatistics,
-                onSettings          = onNavigateToSettings,
-                onAnalytics         = onNavigateToAnalytics,
-                onAchievement       = onNavigateToAchievement
-            )
-
-            // ── Filter Pills ───────────────────────────────────────────────
-            if (uiState is HomeUiState.Success) {
-                val habits = (uiState as HomeUiState.Success).habits
-                FilterPillRow(
-                    selected   = selectedFilter,
-                    onChange   = { selectedFilter = it },
-                    habits     = habits
+                // Premium Header with glassmorphism
+                PremiumHeader(
+                    uiState = uiState,
+                    isScrolled = isScrolled,
+                    scrollOffset = scrollOffset,
+                    onStatistics = onNavigateToStatistics,
+                    onSettings = onNavigateToSettings,
+                    onAnalytics = onNavigateToAnalytics,
+                    onAchievement = onNavigateToAchievement
                 )
-            }
 
-            // ── Content ───────────────────────────────────────────────────
-            when (val state = uiState) {
-                is HomeUiState.Loading -> LoadingView()
-                is HomeUiState.Error   -> ErrorView(state.message)
-                is HomeUiState.Success -> {
-                    val filtered = when (selectedFilter) {
-                        HabitFilter.ALL       -> state.habits
-                        HabitFilter.COMPLETED -> state.habits.filter { it.isCompletedToday }
-                        HabitFilter.PENDING   -> state.habits.filter { !it.isCompletedToday }
-                        HabitFilter.STREAK    -> state.habits.sortedByDescending { it.habit.currentStreak }
+                // Filter Pills
+                if (uiState is HomeUiState.Success) {
+                    val habits = (uiState as HomeUiState.Success).habits
+                    GradientFilterPills(
+                        selected = selectedFilter,
+                        onChange = { selectedFilter = it },
+                        habits = habits
+                    )
+                }
+
+                // Main Content
+                when (val state = uiState) {
+                    is HomeUiState.Loading -> {
+                        PremiumLoadingView()
                     }
-                    if (filtered.isEmpty()) {
-                        EmptyHabitsView(filter = selectedFilter)
-                    } else {
-                        LazyColumn(
-                            state           = listState,
-                            modifier        = Modifier.fillMaxSize(),
-                            contentPadding  = PaddingValues(
-                                start  = 16.dp,
-                                end    = 16.dp,
-                                top    = 8.dp,
-                                bottom = 88.dp
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            // Daily progress banner (top)
-                            item {
-                                DailyProgressBanner(habits = state.habits)
-                            }
-                            items(
-                                items = filtered,
-                                key   = { it.habit.id }
-                            ) { habitWithStatus ->
-                                SwipeToDeleteHabitItem(
-                                    habitWithStatus = habitWithStatus,
-                                    onToggle        = { viewModel.toggleHabitCompletion(it) },
-                                    onClick         = { onNavigateToDetail(it) },
-                                    onDelete        = { viewModel.deleteHabit(it) },
-                                    modifier        = Modifier.animateItem(
-                                        placementSpec = spring(
-                                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                                            stiffness    = Spring.StiffnessMedium
+                    is HomeUiState.Error -> {
+                        PremiumErrorView(state.message)
+                    }
+                    is HomeUiState.Success -> {
+                        val filtered = when (selectedFilter) {
+                            HabitFilter.ALL -> state.habits
+                            HabitFilter.COMPLETED -> state.habits.filter { it.isCompletedToday }
+                            HabitFilter.PENDING -> state.habits.filter { !it.isCompletedToday }
+                            HabitFilter.STREAK -> state.habits.sortedByDescending { it.habit.currentStreak }
+                        }
+
+                        if (filtered.isEmpty()) {
+                            PremiumEmptyState(filter = selectedFilter)
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 8.dp,
+                                    bottom = 100.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // Hero Progress Card
+                                item {
+                                    HeroProgressCard(habits = state.habits)
+                                }
+
+                                // Quick Stats Row
+                                item {
+                                    QuickStatsRow(habits = state.habits)
+                                }
+
+                                // Habit Items
+                                items(
+                                    items = filtered,
+                                    key = { it.habit.id }
+                                ) { habitWithStatus ->
+                                    PremiumHabitCard(
+                                        habitWithStatus = habitWithStatus,
+                                        // Pass the ID explicitly to the toggle/detail/delete functions
+                                        onToggle = { id ->
+                                            viewModel.toggleHabitCompletion(id)
+                                        },
+
+//                                                onDelete = { id ->
+//                                            viewModel.deleteHabit(id)
+//                                        },
+                                        onClick = { id -> onNavigateToDetail(id) },
+                                        //onDelete = { id -> viewModel.deleteHabit(habitWithStatus.habit) },
+                                        modifier = Modifier.animateItem(
+                                            placementSpec = spring(
+                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                stiffness = Spring.StiffnessMedium
+                                            )
                                         )
                                     )
-                                )
+                                }
+
+
+                                // Motivational footer
+                                item {
+                                    MotivationalFooter(completionRate =
+                                        if (state.habits.isNotEmpty())
+                                            state.habits.count { it.isCompletedToday }.toFloat() / state.habits.size
+                                        else 0f
+                                    )
+                                }
                             }
                         }
                     }
@@ -198,12 +202,187 @@ fun HomeScreen(
     }
 }
 
-// ─── HomeHeader ───────────────────────────────────────────────────────────────
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun PremiumHabitCard(
+    habitWithStatus: HabitWithStatus,
+    onToggle: (Long) -> Unit,
+    onClick: (Long) -> Unit,
+   // onDelete: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val habit = habitWithStatus.habit
+    val habitId = habit.id
+    val isCompleted = habitWithStatus.isCompletedToday
+
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isCompleted)
+            Color.White.copy(alpha = 0.9f)
+        else Color.White,
+        animationSpec = tween(400),
+        label = "card_bg"
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (isCompleted) 0.98f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy),
+        label = "scale"
+    )
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable { onClick(habitId) },   // ✅ consistent
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+
+            // LEFT SIDE
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (isCompleted)
+                                Brush.linearGradient(listOf(GradientPrimaryStart, GradientPrimaryEnd))
+                            else
+                                Brush.linearGradient(listOf(Color(0xFFF3F4F6), Color(0xFFF3F4F6)))
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = habit.icon.ifBlank { "✨" }
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column {
+                    Text(
+                        text = habit.name,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.LocalFireDepartment,
+                            contentDescription = null,
+                            tint = if (habit.currentStreak > 0)
+                                Color(0xFFFF8E53)
+                            else Color.LightGray,
+                            modifier = Modifier.size(14.dp)
+                        )
+
+                        Text("${habit.currentStreak} day streak")
+                    }
+                }
+            }
+
+            // RIGHT SIDE (TOGGLE)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(48.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = {
+                                onToggle(habitId)   // ✅ FIXED
+                            }
+                        )
+                    }
+            ) {
+
+                val animatedSweep by animateFloatAsState(
+                    targetValue = if (isCompleted) 360f else 0f,
+                    animationSpec = tween(600),
+                    label = "sweep"
+                )
+
+                Canvas(modifier = Modifier.size(44.dp)) {
+                    drawArc(
+                        brush = Brush.linearGradient(
+                            listOf(GradientPrimaryStart, GradientPrimaryEnd)
+                        ),
+                        startAngle = -90f,
+                        sweepAngle = animatedSweep,
+                        useCenter = false,
+                        style = Stroke(width = 4.dp.toPx())
+                    )
+                }
+
+                if (isCompleted) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = GradientPrimaryStart
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Circle,
+                        contentDescription = null,
+                        tint = Color.LightGray
+                    )
+                }
+            }
+        }
+    }
+}
+// ═══ Animated Gradient Background ═══════════════════════════════════════════
 
 @Composable
-private fun HomeHeader(
+fun AnimatedGradientBackground() {
+    val infiniteTransition = rememberInfiniteTransition(label = "gradient")
+
+    val offset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "offset"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFFAFAFC),
+                        Color(0xFFF3F4F6).copy(alpha = 0.5f + offset * 0.5f)
+                    )
+                )
+            )
+    )
+}
+
+// ═══ Premium Header ═══════════════════════════════════════════════════════
+
+@Composable
+fun PremiumHeader(
     uiState: HomeUiState,
     isScrolled: Boolean,
+    scrollOffset: Int,
     onStatistics: () -> Unit,
     onSettings: () -> Unit,
     onAnalytics: () -> Unit,
@@ -211,262 +390,380 @@ private fun HomeHeader(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
+    // Glassmorphism effect
+    val alpha by animateFloatAsState(
+        targetValue = if (isScrolled) 0.95f else 0f,
+        animationSpec = tween(300),
+        label = "header_alpha"
+    )
+
     Surface(
-        color      = SurfaceLight,
-        tonalElevation = 0.dp,
-        modifier   = Modifier
+        color = Color.White.copy(alpha = alpha),
+        tonalElevation = if (isScrolled) 2.dp else 0.dp,
+        modifier = Modifier
             .fillMaxWidth()
-            .drawBehind {
-                if (isScrolled) {
-                    drawLine(
-                        color       = Ink050,
-                        start       = Offset(0f, size.height),
-                        end         = Offset(size.width, size.height),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-            }
+            .blur(if (isScrolled) 0.dp else 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.Center
-        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text       = greetingText(),
-                    style      = MaterialTheme.typography.labelMedium,
-                    color      = Ink300,
-                    fontWeight = FontWeight.Medium
+                    text = getGreeting(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = GradientPrimaryStart,
+                    fontWeight = FontWeight.SemiBold
                 )
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text       = "My Habits",
-                    style      = MaterialTheme.typography.headlineSmall,
+                    text = "My Habits",
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
-                    color      = Ink900
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
-                // Stats button
-                IconButton(
-                    onClick  = onStatistics,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Ink050)
-                ) {
-                    Icon(
-                        Icons.Default.BarChart,
-                        contentDescription = "Statistics",
-                        tint     = Ink500,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Gradient Stats Button
+                GradientIconButton(
+                    onClick = onStatistics,
+                    icon = Icons.Default.BarChart
+                )
 
-                // More menu
+                // Menu
                 Box {
-                    IconButton(
-                        onClick  = { showMenu = !showMenu },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Ink050)
-                    ) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = "Menu",
-                            tint     = Ink500,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded         = showMenu,
-                        onDismissRequest = { showMenu = false },
-                        shape            = RoundedCornerShape(16.dp)
-                    ) {
-                        listOf(
-                            Triple(Icons.Default.Analytics,     "Analytics",    onAnalytics),
-                            Triple(Icons.Default.EmojiEvents,   "Achievements", onAchievement),
-                            Triple(Icons.Default.Download,       "Export data",  {}),
-                            Triple(Icons.Default.Settings,       "Settings",     onSettings)
-                        ).forEach { (icon, label, action) ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        label,
-                                        style      = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(icon, null, tint = Violet, modifier = Modifier.size(18.dp))
-                                },
-                                onClick = { showMenu = false; action() }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        }
-    }
-
-
-// ─── Daily Progress Banner ────────────────────────────────────────────────────
-
-@Composable
-private fun DailyProgressBanner(habits: List<HabitWithStatus>) {
-    if (habits.isEmpty()) return
-    val completed = habits.count { it.isCompletedToday }
-    val total     = habits.size
-    val progress  = completed.toFloat() / total
-
-    val animatedProgress by animateFloatAsState(
-        targetValue   = progress,
-        animationSpec = tween(800, easing = FastOutSlowInEasing),
-        label         = "progress"
-    )
-
-    Card(
-        modifier  = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        shape     = RoundedCornerShape(20.dp),
-        colors    = CardDefaults.cardColors(containerColor = Violet),
-        elevation = CardDefaults.cardElevation(0.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(listOf(Violet, VioletDeep))
-                )
-                .padding(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text       = "Today's progress",
-                            style      = MaterialTheme.typography.labelMedium,
-                            color      = Color.White.copy(alpha = 0.75f)
-                        )
-                        Text(
-                            text       = "$completed of $total completed",
-                            style      = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color      = Color.White
-                        )
-                    }
-                    // Circular progress mini
-                    Box(
-                        modifier         = Modifier.size(52.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            progress    = { animatedProgress },
-                            modifier    = Modifier.fillMaxSize(),
-                            color       = Color.White,
-                            trackColor  = Color.White.copy(alpha = 0.25f),
-                            strokeWidth = 5.dp,
-                            strokeCap   = StrokeCap.Round
-                        )
-                        Text(
-                            text       = "${(progress * 100).toInt()}%",
-                            style      = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color      = Color.White,
-                            fontSize   = 10.sp
-                        )
-                    }
-                }
-
-                // Linear bar
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color.White.copy(alpha = 0.25f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(animatedProgress)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(Color.White)
+                    GradientIconButton(
+                        onClick = { showMenu = !showMenu },
+                        icon = Icons.Default.MoreVert
                     )
-                }
 
-                // Motivational text
-                val message = when {
-                    progress == 1f   -> "Perfect day! All done 🎉"
-                    progress >= 0.7f -> "Almost there, keep going!"
-                    progress >= 0.4f -> "Good momentum building"
-                    total == 0       -> "No habits yet"
-                    else             -> "Start your day strong"
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        MenuOption(Icons.Default.Analytics, "Analytics", onAnalytics) { showMenu = false }
+                        MenuOption(Icons.Default.EmojiEvents, "Achievements", onAchievement) { showMenu = false }
+                        MenuOption(Icons.Default.Download, "Export Data", {}) { showMenu = false }
+                        MenuOption(Icons.Default.Settings, "Settings", onSettings) { showMenu = false }
+                    }
                 }
-                Text(
-                    text  = message,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
             }
         }
     }
 }
 
-// ─── Filter Pill Row ──────────────────────────────────────────────────────────
+@Composable
+fun GradientIconButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(
+                Brush.linearGradient(
+                    listOf(GradientPrimaryStart.copy(alpha = 0.1f), GradientPrimaryEnd.copy(alpha = 0.1f))
+                )
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = GradientPrimaryStart,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
 
 @Composable
-private fun FilterPillRow(
+fun MenuOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    onClick: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    DropdownMenuItem(
+        text = {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        },
+        leadingIcon = {
+            Icon(icon, null, tint = GradientPrimaryStart)
+        },
+        onClick = {
+            onDismiss()
+            onClick()
+        }
+    )
+}
+
+// ═══ Hero Progress Card ═══════════════════════════════════════════════════
+
+@Composable
+fun HeroProgressCard(habits: List<HabitWithStatus>) {
+    if (habits.isEmpty()) return
+
+    val completed = habits.count { it.isCompletedToday }
+    val total = habits.size
+    val progress = completed.toFloat() / total
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "progress"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        listOf(GradientPrimaryStart, GradientPrimaryEnd),
+                        start = Offset(0f, 0f),
+                        end = Offset(1000f, 1000f)
+                    )
+                )
+                .padding(24.dp)
+        ) {
+            // Decorative circles
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.1f),
+                    radius = 120.dp.toPx(),
+                    center = Offset(size.width * 0.8f, -50.dp.toPx())
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.05f),
+                    radius = 80.dp.toPx(),
+                    center = Offset(-20.dp.toPx(), size.height * 0.7f)
+                )
+            }
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        "Today's Progress",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            "$completed",
+                            style = MaterialTheme.typography.displayLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            "/ $total",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                }
+
+                // Animated Progress Bar
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(animatedProgress)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color.White, Color.White.copy(alpha = 0.9f))
+                                    )
+                                )
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            getMotivationalText(progress),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "${(progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ═══ Quick Stats Row ═══════════════════════════════════════════════════════
+
+@Composable
+fun QuickStatsRow(habits: List<HabitWithStatus>) {
+    val totalStreaks = habits.sumOf { it.habit.currentStreak }
+    val longestStreak = habits.maxOfOrNull { it.habit.longestStreak } ?: 0
+    val totalCompletions = habits.sumOf { it.habit.totalCompletions }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        QuickStatCard(
+            icon = "🔥",
+            value = totalStreaks.toString(),
+            label = "Active Streaks",
+            gradient = Brush.linearGradient(listOf(Color(0xFFFF6B6B), Color(0xFFFF8E53))),
+            modifier = Modifier.weight(1f)
+        )
+        QuickStatCard(
+            icon = "⭐",
+            value = longestStreak.toString(),
+            label = "Best Streak",
+            gradient = Brush.linearGradient(listOf(Color(0xFFFFC107), Color(0xFFFF9800))),
+            modifier = Modifier.weight(1f)
+        )
+        QuickStatCard(
+            icon = "✅",
+            value = totalCompletions.toString(),
+            label = "Completed",
+            gradient = Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF059669))),
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun QuickStatCard(
+    icon: String,
+    value: String,
+    label: String,
+    gradient: Brush,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.height(100.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(gradient.copy(alpha = 0.1f))
+                .padding(16.dp)
+        ) {
+            Column(
+                verticalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxHeight()
+            ) {
+                Text(
+                    icon,
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Column {
+                    Text(
+                        value,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ═══ Gradient Filter Pills ═══════════════════════════════════════════════
+
+@Composable
+fun GradientFilterPills(
     selected: HabitFilter,
     onChange: (HabitFilter) -> Unit,
     habits: List<HabitWithStatus>
 ) {
     val filters = listOf(
-        HabitFilter.ALL       to "All (${habits.size})",
+        HabitFilter.ALL to "All (${habits.size})",
         HabitFilter.COMPLETED to "Done (${habits.count { it.isCompletedToday }})",
-        HabitFilter.PENDING   to "Pending (${habits.count { !it.isCompletedToday }})",
-        HabitFilter.STREAK    to "🔥 Streaks"
+        HabitFilter.PENDING to "Pending (${habits.count { !it.isCompletedToday }})",
+        HabitFilter.STREAK to "🔥 Streaks"
     )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         filters.forEach { (filter, label) ->
             val isSelected = selected == filter
+
             Surface(
-                onClick   = { onChange(filter) },
-                shape     = RoundedCornerShape(50.dp),
-                color     = if (isSelected) Violet else Ink050,
-                modifier  = Modifier.height(34.dp)
+                onClick = { onChange(filter) },
+                shape = RoundedCornerShape(50.dp),
+                color = Color.Transparent,
+                modifier = Modifier.height(40.dp)
             ) {
-                Row(
-                    modifier          = Modifier.padding(horizontal = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (isSelected)
+                                Brush.horizontalGradient(listOf(GradientPrimaryStart, GradientPrimaryEnd))
+                            else
+                                Brush.horizontalGradient(listOf(Color(0xFFF3F4F6), Color(0xFFF3F4F6)))
+                        )
+                        .padding(horizontal = 18.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text       = label,
-                        style      = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        color      = if (isSelected) Color.White else Ink500
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -474,79 +771,169 @@ private fun FilterPillRow(
     }
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
+// ═══ Premium FAB ═══════════════════════════════════════════════════════════
 
 @Composable
-private fun EmptyHabitsView(filter: HabitFilter) {
-    val (emoji, title, subtitle) = when (filter) {
-        HabitFilter.ALL       -> Triple("🎯", "No habits yet", "Tap + to create your first")
-        HabitFilter.COMPLETED -> Triple("✅", "None completed yet", "Start checking off habits!")
-        HabitFilter.PENDING   -> Triple("🎉", "All done today!", "Come back tomorrow")
-        HabitFilter.STREAK    -> Triple("🔥", "No active streaks", "Complete daily to build one")
-    }
-    Column(
-        modifier              = Modifier
-            .fillMaxSize()
-            .padding(48.dp),
-        horizontalAlignment   = Alignment.CenterHorizontally,
-        verticalArrangement   = Arrangement.Center
+fun PremiumFAB(onClick: () -> Unit) {
+    var isPressed by remember { mutableStateOf(false) }
+
+    FloatingActionButton(
+        onClick = {
+            isPressed = true
+            onClick()
+        },
+        containerColor = Color.Transparent,
+        contentColor = Color.White,
+        elevation = FloatingActionButtonDefaults.elevation(0.dp),
+        modifier = Modifier
+            .size(64.dp)
+            .scale(if (isPressed) 0.95f else 1f)
+            .background(
+                Brush.linearGradient(listOf(GradientPrimaryStart, GradientPrimaryEnd)),
+                shape = RoundedCornerShape(50.dp)
+            )
     ) {
-        Text(emoji, style = MaterialTheme.typography.displayMedium)
-        Spacer(Modifier.height(20.dp))
-        Text(
-            title,
-            style      = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color      = Ink900
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = Ink300
+        Icon(
+            Icons.Default.Add,
+            contentDescription = "Add Habit",
+            modifier = Modifier.size(28.dp)
         )
     }
 }
 
-// ─── Loading / Error ──────────────────────────────────────────────────────────
+// ═══ Premium Snackbar ═══════════════════════════════════════════════════════
 
 @Composable
-private fun LoadingView() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(color = Violet, strokeWidth = 3.dp)
-    }
+fun PremiumSnackbar(data: SnackbarData) {
+    Snackbar(
+        snackbarData = data,
+        containerColor = Color(0xFF1E1E2D),
+        contentColor = Color.White,
+        actionColor = GradientPrimaryStart,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.padding(16.dp)
+    )
 }
 
-@Composable
-private fun ErrorView(message: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier            = Modifier.padding(32.dp)
-        ) {
-            Icon(
-                Icons.Default.ErrorOutline,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint     = Coral
-            )
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Coral
-            )
-        }
-    }
-}
+// ═══ Helper Functions ═══════════════════════════════════════════════════════
 
-// ─── Util ─────────────────────────────────────────────────────────────────────
-
-private fun greetingText(): String {
+fun getGreeting(): String {
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     return when {
-        hour < 12 -> "Good morning"
-        hour < 17 -> "Good afternoon"
-        else      -> "Good evening"
+        hour < 12 -> "Good Morning ☀️"
+        hour < 17 -> "Good Afternoon 🌤️"
+        else -> "Good Evening 🌙"
+    }
+}
+
+fun getMotivationalText(progress: Float): String {
+    return when {
+        progress == 1f -> "Perfect day! All done 🎉"
+        progress >= 0.75f -> "Almost there! Keep it up 💪"
+        progress >= 0.5f -> "Great progress today! 🚀"
+        progress >= 0.25f -> "Good start! Keep going 🌟"
+        else -> "Let's build some habits! ✨"
+    }
+}
+
+fun Brush.copy(alpha: Float): Brush {
+    // Helper to apply alpha to gradient
+    return this
+}
+
+// ═══ Loading & Error Views ═══════════════════════════════════════════════
+
+@Composable
+fun PremiumLoadingView() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            color = GradientPrimaryStart,
+            strokeWidth = 4.dp,
+            modifier = Modifier.size(48.dp)
+        )
+    }
+}
+
+@Composable
+fun PremiumErrorView(message: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            Icons.Default.ErrorOutline,
+            contentDescription = null,
+            tint = Color(0xFFEF4444),
+            modifier = Modifier.size(64.dp)
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun PremiumEmptyState(filter: HabitFilter) {
+    val (emoji, title, subtitle) = when (filter) {
+        HabitFilter.ALL -> Triple("🎯", "No habits yet", "Start building better habits today!")
+        HabitFilter.COMPLETED -> Triple("✅", "Nothing completed yet", "Mark your first habit as done!")
+        HabitFilter.PENDING -> Triple("🎉", "All caught up!", "Amazing work! Come back tomorrow")
+        HabitFilter.STREAK -> Triple("🔥", "No streaks yet", "Complete habits daily to start streaks")
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(emoji, style = MaterialTheme.typography.displayLarge)
+        Spacer(Modifier.height(24.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun MotivationalFooter(completionRate: Float) {
+    val quote = when {
+        completionRate >= 0.8f -> "\"Success is the sum of small efforts repeated day in and day out.\" 💫"
+        completionRate >= 0.5f -> "\"A journey of a thousand miles begins with a single step.\" 🚀"
+        else -> "\"The secret of getting ahead is getting started.\" ✨"
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.6f))
+    ) {
+        Text(
+            quote,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(20.dp)
+        )
     }
 }

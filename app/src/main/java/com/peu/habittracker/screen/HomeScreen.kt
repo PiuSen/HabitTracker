@@ -64,7 +64,7 @@ enum class HabitFilter { ALL, COMPLETED, PENDING, STREAK }
 
 // ─────────────────────────────────────────────────────────────────────────────
 @RequiresApi(Build.VERSION_CODES.O)
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToAddHabit: () -> Unit,
@@ -75,107 +75,151 @@ fun HomeScreen(
     onNavigateToAchievement: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    val uiState     by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
     val deletedHabit by viewModel.deletedHabit.collectAsState()
-    val snackbar    = remember { SnackbarHostState() }
-    var filter      by remember { mutableStateOf(HabitFilter.ALL) }
-    val listState   = rememberLazyListState()
-    val scope       = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    val isScrolled  by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+    var filter by remember { mutableStateOf(HabitFilter.ALL) }
+    val listState = rememberLazyListState()
+
+    val isScrolled by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 }
+    }
 
     LaunchedEffect(deletedHabit) {
         deletedHabit?.let { habit ->
-            val result = snackbar.showSnackbar(
-                message      = "🗑️  ${habit.name} deleted",
-                actionLabel  = "Undo",
-                duration     = SnackbarDuration.Short
+            val result = snackbarHostState.showSnackbar(
+                message = "🗑️ ${habit.name} deleted",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
             )
-            if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.undoDelete()
+            }
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(NightBase)) {
-        // ── Ambient glow orbs ────────────────────────────────────────────────
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NightBase)
+    ) {
+
         AmbientOrbs()
 
         Scaffold(
             containerColor = Color.Transparent,
-            snackbarHost = { SnackbarHost(snackbar) { DarkSnackbar(it) } },
-            floatingActionButton = { NeonFAB(onClick = onNavigateToAddHabit) }
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState) {
+                    DarkSnackbar(it)
+                }
+            },
+            floatingActionButton = {
+                NeonFAB(onClick = onNavigateToAddHabit)
+            }
         ) { padding ->
+
             Column(
-                modifier = Modifier.fillMaxSize().padding(padding)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
+
                 DarkHeader(
-                    uiState      = uiState,
-                    isScrolled   = isScrolled,
+                    uiState = uiState,
+                    isScrolled = isScrolled,
                     onStatistics = onNavigateToStatistics,
-                    onSettings   = onNavigateToSettings,
-                    onAnalytics  = onNavigateToAnalytics,
+                    onSettings = onNavigateToSettings,
+                    onAnalytics = onNavigateToAnalytics,
                     onAchievement = onNavigateToAchievement
                 )
 
                 if (uiState is HomeUiState.Success) {
                     val habits = (uiState as HomeUiState.Success).habits
-                    NeonFilterPills(selected = filter, onChange = { filter = it }, habits = habits)
+
+                    NeonFilterPills(
+                        selected = filter,
+                        onChange = { filter = it },
+                        habits = habits
+                    )
                 }
 
                 when (val state = uiState) {
-                    is HomeUiState.Loading -> DarkLoadingView()
-                    is HomeUiState.Error   -> DarkErrorView(state.message)
+
+                    is HomeUiState.Loading -> {
+                        DarkLoadingView()
+                    }
+
+                    is HomeUiState.Error -> {
+                        DarkErrorView(state.message)
+                    }
+
                     is HomeUiState.Success -> {
+
                         val filtered = when (filter) {
-                            HabitFilter.ALL       -> state.habits
+                            HabitFilter.ALL -> state.habits
                             HabitFilter.COMPLETED -> state.habits.filter { it.isCompletedToday }
-                            HabitFilter.PENDING   -> state.habits.filter { !it.isCompletedToday }
-                            HabitFilter.STREAK    -> state.habits.sortedByDescending { it.habit.currentStreak }
+                            HabitFilter.PENDING -> state.habits.filter { !it.isCompletedToday }
+                            HabitFilter.STREAK -> state.habits.sortedByDescending { it.habit.currentStreak }
                         }
 
                         if (filtered.isEmpty()) {
                             DarkEmptyState(filter)
                         } else {
+
                             LazyColumn(
-                                state           = listState,
-                                modifier        = Modifier.fillMaxSize(),
-                                contentPadding  = PaddingValues(
-                                    start   = 16.dp,
-                                    end     = 16.dp,
-                                    top     = 4.dp,
-                                    bottom  = 120.dp
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 4.dp,
+                                    bottom = 120.dp
                                 ),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Hero ring card
-                                item { NeonRingProgressCard(habits = state.habits) }
 
-                                // Mini stat chips
-                                item { MiniStatsRow(habits = state.habits) }
+                                item {
+                                    NeonRingProgressCard(habits = state.habits)
+                                }
 
-                                // Streak leaderboard teaser
-                                item { StreakLeaderboard(habits = state.habits) }
+                                item {
+                                    MiniStatsRow(habits = state.habits)
+                                }
 
-                                // Habit items
-                                items(filtered, key = { it.habit.id }) { hws ->
+                                item {
+                                    StreakLeaderboard(habits = state.habits)
+                                }
+
+                                items(
+                                    items = filtered,
+                                    key = { it.habit.id }
+                                ) { hws ->
+
                                     GlassHabitCard(
                                         habitWithStatus = hws,
-                                        onToggle  = { id -> viewModel.toggleHabitCompletion(id) },
-                                        onClick   = { id -> onNavigateToDetail(id) },
-                                        modifier  = Modifier.animateItem(
-                                            placementSpec = spring(
-                                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                stiffness    = Spring.StiffnessMedium
-                                            )
-                                        )
+                                        onToggle = {
+                                            viewModel.toggleHabitCompletion(it)
+                                        },
+                                        onClick = {
+                                            onNavigateToDetail(it)
+                                        },
+//                                        modifier = Modifier.animateItem(
+//                                            placementSpec = spring(
+//                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+//                                                stiffness = Spring.StiffnessMedium
+//                                            )
+//                                        )
                                     )
                                 }
 
-                                // Motivational footer
                                 item {
                                     DarkMotivationalFooter(
-                                        rate = if (state.habits.isNotEmpty())
-                                            state.habits.count { it.isCompletedToday }.toFloat() / state.habits.size
-                                        else 0f
+                                        rate =
+                                            if (state.habits.isNotEmpty())
+                                                state.habits.count { it.isCompletedToday }.toFloat() /
+                                                        state.habits.size
+                                            else 0f
                                     )
                                 }
                             }

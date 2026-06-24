@@ -109,3 +109,13 @@ val DEFAULT_ACHIEVEMENTS = listOf(
     Achievement(id = 7, title = "Habit Hero", description = "Maintain a 100-day streak",
         icon = "🏆", requirement = 100, type = "streak")
 )
+data class HabitWithCompletions(
+    @Embedded
+    val habit: Habit,
+
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "habitId"
+    )
+    val completions: List<HabitCompletion>
+)

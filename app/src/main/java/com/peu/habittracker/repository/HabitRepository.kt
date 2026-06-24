@@ -6,6 +6,7 @@ import com.peu.habittracker.db.Category
 import com.peu.habittracker.db.DailyStat
 import com.peu.habittracker.db.Habit
 import com.peu.habittracker.db.HabitCompletion
+import com.peu.habittracker.db.HabitWithCompletions
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -27,4 +28,8 @@ interface HabitRepository {
 
     // ✅ ADD THIS
     fun getAllCategories(): Flow<List<Category>>
+    // Export support
+    fun getAllHabitsWithCompletions(): Flow<List<HabitWithCompletions>>
+
+    suspend fun getAllHabitsWithCompletionsOnce(): List<HabitWithCompletions>
 }

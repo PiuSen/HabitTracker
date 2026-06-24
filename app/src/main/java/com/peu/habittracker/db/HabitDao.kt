@@ -94,6 +94,14 @@ WHERE date = :date
 
     @Query("SELECT * FROM habit_completions WHERE habitId = :habitId AND date >= :startDate AND date <= :endDate")
     suspend fun getCompletionsInRange(habitId: Long, startDate: String, endDate: String): List<HabitCompletion>
+
+    @Transaction
+    @Query("SELECT * FROM habits ORDER BY createdAt DESC")
+    fun getAllHabitsWithCompletions(): Flow<List<HabitWithCompletions>>
+
+    @Transaction
+    @Query("SELECT * FROM habits ORDER BY createdAt DESC")
+    suspend fun getAllHabitsWithCompletionsOnce(): List<HabitWithCompletions>
 }
 
 

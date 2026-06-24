@@ -73,6 +73,7 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToAnalytics: () -> Unit,
     onNavigateToAchievement: () -> Unit,
+    onNavigateToExportData:()-> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -131,7 +132,8 @@ fun HomeScreen(
                     onStatistics = onNavigateToStatistics,
                     onSettings = onNavigateToSettings,
                     onAnalytics = onNavigateToAnalytics,
-                    onAchievement = onNavigateToAchievement
+                    onAchievement = onNavigateToAchievement,
+                    onExportData = onNavigateToExportData
                 )
 
                 if (uiState is HomeUiState.Success) {
@@ -283,7 +285,8 @@ fun DarkHeader(
     onStatistics: () -> Unit,
     onSettings: () -> Unit,
     onAnalytics: () -> Unit,
-    onAchievement: () -> Unit
+    onAchievement: () -> Unit,
+    onExportData:() -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val bgAlpha by animateFloatAsState(
@@ -346,7 +349,16 @@ fun DarkHeader(
                     ) {
                         DarkMenuOption(Icons.Default.Analytics,   "Analytics",    onAnalytics)   { showMenu = false }
                         DarkMenuOption(Icons.Default.EmojiEvents, "Achievements", onAchievement) { showMenu = false }
-                        DarkMenuOption(Icons.Default.Download,    "Export Data",  {})            { showMenu = false }
+                        DarkMenuOption(
+                            Icons.Default.Download,
+                            "Export Data",
+
+                                //showMenu = false
+                                onExportData
+
+                        ){
+                            showMenu=false
+                        }
                         DarkMenuOption(Icons.Default.Settings,    "Settings",     onSettings)    { showMenu = false }
                     }
                 }

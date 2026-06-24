@@ -433,13 +433,36 @@ private fun SettingsToggleRow(
 }
 
 @Composable
-private fun NeonSwitch(checked: Boolean, onToggle: (Boolean) -> Unit, gradient: List<Color>) {
-    val thumbPos by animateFloatAsState(if (checked) 1f else 0f,
-        spring(Spring.DampingRatioMediumBouncy), label = "sw")
+private fun NeonSwitch(
+    checked: Boolean,
+    onToggle: (Boolean) -> Unit,
+    gradient: List<Color>
+) {
+    val thumbPos by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy
+        ),
+        label = "sw"
+    )
+
     val trackColor by animateColorAsState(
-        if (checked) gradient[0].copy(alpha = 0.3f) else GlassWhite, tween(200), label = "swc")
+        targetValue = if (checked)
+            gradient[0].copy(alpha = 0.3f)
+        else
+            GlassWhite,
+        animationSpec = tween(200),
+        label = "swc"
+    )
+
     val borderColor by animateColorAsState(
-        if (checked) gradient[0].copy(alpha = 0.6f) else GlassStroke, tween(200), label = "sbc")
+        targetValue = if (checked)
+            gradient[0].copy(alpha = 0.6f)
+        else
+            GlassStroke,
+        animationSpec = tween(200),
+        label = "sbc"
+    )
 
     Box(
         modifier = Modifier
@@ -447,23 +470,34 @@ private fun NeonSwitch(checked: Boolean, onToggle: (Boolean) -> Unit, gradient: 
             .height(26.dp)
             .clip(RoundedCornerShape(13.dp))
             .background(trackColor)
-            .border(1.dp, borderColor, RoundedCornerShape(13.dp))
-            .clickable { onToggle(!checked) },
-        contentAlignment = Alignment.CenterStart
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(13.dp)
+            )
+            .clickable { onToggle(!checked) }
     ) {
         Box(
             modifier = Modifier
-                .padding(start = (3 + thumbPos * 22).dp)
+                .offset(x = (3.dp + (22.dp * thumbPos)))
+                .align(Alignment.CenterStart)
                 .size(20.dp)
                 .clip(CircleShape)
                 .background(
-                    if (checked) Brush.linearGradient(gradient)
-                    else Brush.linearGradient(listOf(TextSecondary.copy(0.5f), TextSecondary.copy(0.3f)))
+                    brush = if (checked) {
+                        Brush.linearGradient(gradient)
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                TextSecondary.copy(alpha = 0.5f),
+                                TextSecondary.copy(alpha = 0.3f)
+                            )
+                        )
+                    }
                 )
         )
     }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ACTION ROW
 // ─────────────────────────────────────────────────────────────────────────────

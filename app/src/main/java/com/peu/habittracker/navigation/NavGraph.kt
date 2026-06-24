@@ -15,6 +15,7 @@ import androidx.navigation.navArgument
 import com.peu.habittracker.screen.AchievementsScreen
 import com.peu.habittracker.screen.AddHabitScreen
 import com.peu.habittracker.screen.AnalyticsScreen
+import com.peu.habittracker.screen.ExportDataScreen
 import com.peu.habittracker.screen.HomeScreen
 import com.peu.habittracker.screen.HabitDetailScreen // Add this import
 import com.peu.habittracker.screen.SettingsScreen
@@ -33,6 +34,8 @@ sealed class Screen(val route: String) {
     object Settings : Screen("settings")
     object Analytics : Screen("analytics")
     object Achievements : Screen("achievements") // ✅ ADD THIS
+
+    object ExportData : Screen("exportdata")
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -62,6 +65,9 @@ fun NavGraph(navController: NavHostController) {
                 onNavigateToAchievement = { navController.navigate(Screen.Achievements.route) },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
+                },
+                onNavigateToExportData = {
+                    navController.navigate(Screen.ExportData.route)
                 }
             )
         }
@@ -168,6 +174,10 @@ fun NavGraph(navController: NavHostController) {
             StatisticsScreen (
                 onNavigateBack = { navController.popBackStack() }
             )
+        }
+
+        composable(Screen.ExportData.route) {
+            ExportDataScreen(onNavigateBack = { navController.popBackStack() })
         }
 
         // Settings Screen

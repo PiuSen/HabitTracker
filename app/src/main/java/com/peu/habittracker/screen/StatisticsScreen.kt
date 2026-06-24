@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -315,7 +316,7 @@ private fun StatsNeonChip(
     val animVal by animateFloatAsState(value.toFloatOrNull() ?: 0f,
         spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow), label = "cv")
     Box(
-        modifier = modifier.height(90.dp)
+        modifier = modifier.height(95.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(CardDark)
             .border(1.dp, grad[0].copy(0.28f), RoundedCornerShape(20.dp))
@@ -341,130 +342,69 @@ private fun StatsNeonChip(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun StatsWeeklyChart(weeklyStats: List<Int>) {
-
-    val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    val days   = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     val maxVal = weeklyStats.maxOrNull()?.coerceAtLeast(1) ?: 1
-    val bestIdx = weeklyStats.indexOf(weeklyStats.maxOrNull())
+    val bestIdx= weeklyStats.indexOf(weeklyStats.maxOrNull())
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
             .background(CardDark)
             .border(1.dp, GlassStroke, RoundedCornerShape(24.dp))
             .padding(16.dp)
     ) {
-
-        Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-
-                Text(
-                    "Weekly Overview",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                Text("Weekly Overview", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold, color = TextPrimary)
                 if (bestIdx >= 0) {
-                    Surface(
-                        shape = RoundedCornerShape(50.dp),
-                        color = NeonAmber.copy(alpha = 0.12f),
-                        modifier = Modifier.border(
-                            1.dp,
-                            NeonAmber.copy(alpha = 0.35f),
-                            RoundedCornerShape(50.dp)
-                        )
-                    ) {
-                        Text(
-                            "🔥 Best: ${days.getOrElse(bestIdx) { "" }}",
+                    Surface(shape = RoundedCornerShape(50.dp), color = NeonAmber.copy(0.12f),
+                        modifier = Modifier.border(1.dp, NeonAmber.copy(0.35f), RoundedCornerShape(50.dp))) {
+                        Text("🔥 Best: ${days.getOrElse(bestIdx) { "" }}",
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = NeonAmber,
-                            fontWeight = FontWeight.Bold
-                        )
+                            color = NeonAmber, fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(150.dp),
+                modifier = Modifier.fillMaxWidth().height(150.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
-
                 weeklyStats.forEachIndexed { idx, v ->
-
                     val frac = v.toFloat() / maxVal
-                    val animH by animateFloatAsState(
-                        targetValue = frac,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow
-                        ),
-                        label = "wh$idx"
-                    )
-
+                    val animH by animateFloatAsState(frac,
+                        spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow), label = "wh$idx")
                     val isBest = idx == bestIdx
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Bottom
-                    ) {
-
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.Bottom,Alignment.CenterHorizontally, ) {
                         if (v > 0) {
-                            Text(
-                                "$v",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isBest) NeonAmber else NeonViolet,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("$v", style = MaterialTheme.typography.labelSmall,
+                                color = if (isBest) NeonAmber else NeonViolet, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(3.dp))
                         }
-
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth()
                                 .fillMaxHeight(animH.coerceAtLeast(0.04f))
-                                .clip(
-                                    RoundedCornerShape(
-                                        topStart = 6.dp,
-                                        topEnd = 6.dp
-                                    )
-                                )
+                                .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
                                 .background(
-                                    if (isBest)
-                                        Brush.verticalGradient(AmberGrad)
-                                    else
-                                        Brush.verticalGradient(
-                                            VioletGrad.map { it.copy(alpha = 0.7f) }
-                                        )
+                                    if (isBest) Brush.verticalGradient(AmberGrad)
+                                    else Brush.verticalGradient(VioletGrad.map { it.copy(0.7f) })
                                 )
                         )
-
                         Spacer(Modifier.height(6.dp))
-
-                        Text(
-                            days.getOrElse(idx) { "" },
+                        Text(days.getOrElse(idx) { "" },
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isBest) NeonAmber else TextSecondary,
-                            fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal
-                        )
+                            fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal)
                     }
                 }
             }
         }
     }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DONUT BREAKDOWN CARD
 // ─────────────────────────────────────────────────────────────────────────────

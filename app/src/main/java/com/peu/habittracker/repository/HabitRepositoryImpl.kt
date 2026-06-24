@@ -6,15 +6,19 @@ import com.peu.habittracker.db.DailyStat
 import com.peu.habittracker.db.Habit
 import com.peu.habittracker.db.HabitCompletion
 import com.peu.habittracker.db.HabitDao
+import com.peu.habittracker.db.HabitWithCompletions
+
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 class HabitRepositoryImpl @Inject constructor(
     private val habitDao: HabitDao
-) : HabitRepository {
+) : HabitRepository
+{
 
     override fun getAllHabits(): Flow<List<Habit>> = habitDao.getAllHabits()
 
@@ -160,5 +164,15 @@ class HabitRepositoryImpl @Inject constructor(
 
     override fun getAllCategories(): Flow<List<Category>> {
         return habitDao.getAllCategories()
+    }
+
+    override fun getAllHabitsWithCompletions():
+            Flow<List<HabitWithCompletions>> {
+        return habitDao.getAllHabitsWithCompletions()
+    }
+
+    override suspend fun getAllHabitsWithCompletionsOnce():
+            List<HabitWithCompletions> {
+        return habitDao.getAllHabitsWithCompletionsOnce()
     }
 }
